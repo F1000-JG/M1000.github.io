@@ -1,0 +1,590 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Interfaz: Cámara + Traducción + Voz (Mejorada)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <meta name="color-scheme" content="light dark" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <style>
+    :root { --bg: #0D0D0D; --card:#3F094F; --muted:#F2F2F2; --accent1:#D923DB; --accent2:#80277B; }
+    html { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, Ubuntu, Cantarell, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+    .message-box { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); border-radius: 1rem; padding: 1rem; margin-top: 0.5rem; font-size: 2rem; text-align: center; font-weight: bold; }
+    .subtitle-box { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); border-radius: 0.5rem; padding: 0.5rem 1rem; margin-top: 0.5rem; font-size: 1.25rem; text-align: center; font-weight: bold; color: #F2F2F2; }
+  </style>
+</head>
+
+<body class="min-h-screen bg-[var(--bg)] text-[var(--muted)]">
+  <header class="bg-[var(--card)] shadow-md">
+    <div class="max-w-6xl mx-auto px-4 py-5 flex justify-between items-center">
+      <h1 class="text-2xl font-extrabold">✋ Aprende Lengua de Señas</h1>
+      <nav class="flex gap-2">
+        <a href="Interfaz_principal.html" class="px-4 py-2 rounded-lg bg-[var(--accent1)] hover:bg-[var(--accent2)] font-semibold text-white">Inicio</a>
+        <button id="btnToggleAuto" class="px-4 py-2 rounded-lg bg-[var(--accent2)] hover:bg-[var(--accent1)] font-semibold text-white">Auto: OFF</button>
+      </nav>
+    </div>
+  </header>
+
+  <header class="max-w-6xl mx-auto px-4 py-6 flex items-center justify-between">
+    <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight">Cámara + Traducción + Voz (Mejorada)</h1>
+    <div class="text-xs sm:text-sm text-[var(--muted)]">Demo HTML/JS (sin backend)</div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 pb-20">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- CAMARA -->
+      <section class="bg-[var(--card)]/60 rounded-2xl p-4 sm:p-6 shadow-xl ring-1 ring-white/5 lg:col-span-2">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold">Cámara</h2>
+          <span class="text-xs text-[var(--muted)]" id="camStatus">inactiva</span>
+        </div>
+        <div class="space-y-4">
+          <div class="aspect-video w-full overflow-hidden rounded-xl ring-1 ring-white/10">
+            <video id="video" class="w-full h-full object-cover bg-slate-800" playsinline></video>
+          </div>
+          <canvas id="canvas" width="640" height="480" class="w-full rounded-xl ring-1 ring-white/10"></canvas>
+          <div class="grid grid-cols-2 sm:grid-cols-6 gap-2">
+            <button id="btnStartCam" class="px-3 py-2 rounded-xl bg-[var(--accent1)] hover:bg-[var(--accent2)] transition font-medium">Iniciar</button>
+            <button id="btnStopCam" class="px-3 py-2 rounded-xl bg-[var(--card)] hover:bg-[#5a0b5a] transition font-medium">Detener</button>
+            <button id="btnTranslateText" class="px-3 py-2 rounded-xl bg-[var(--accent2)] hover:bg-[var(--accent1)] transition font-medium">Traducir a Texto</button>
+            <button id="btnTranslateVoice" class="px-3 py-2 rounded-xl bg-[var(--accent2)] hover:bg-[var(--accent1)] transition font-medium">Traducir a Voz</button>
+            <button id="btnSpace" class="px-3 py-2 rounded-xl bg-[var(--card)] hover:bg-[#5a0b5a] transition font-medium">Espacio</button>
+            <button id="btnBack" class="px-3 py-2 rounded-xl bg-[var(--card)] hover:bg-[#5a0b5a] transition font-medium">Borrar</button>
+          </div>
+          <div id="subtitles" class="subtitle-box">Aquí aparecerán los subtítulos de las señas</div>
+        </div>
+      </section>
+
+      <!-- ENTRENADOR KNN + MENSAJES -->
+      <section class="bg-[var(--card)]/60 rounded-2xl p-4 sm:p-6 shadow-xl ring-1 ring-white/5">
+        <h3 class="font-semibold mb-2">Entrenador rápido (letras)</h3>
+        <div class="space-y-3">
+          <div class="flex gap-2">
+            <select id="labelSelect" class="bg-[#0D0D0D] rounded-xl p-2 ring-1 ring-white/10 flex-1">
+              <option value="">— Selecciona letra —</option>
+            </select>
+            <button id="btnAddSample" class="px-3 py-2 rounded-xl bg-[var(--accent1)] hover:bg-[var(--accent2)] font-medium">Agregar muestra</button>
+          </div>
+          <div class="text-xs text-[var(--muted)]" id="sampleInfo">0 clases | 0 muestras</div>
+          <div class="flex gap-2">
+            <button id="btnClearData" class="px-3 py-2 rounded-xl bg-[var(--card)] hover:bg-[#5a0b5a] font-medium">Borrar dataset</button>
+            <button id="btnExportData" class="px-3 py-2 rounded-xl bg-[var(--card)] hover:bg-[#5a0b5a] font-medium">Exportar JSON</button>
+            <input id="fileImport" type="file" accept="application/json" class="hidden" />
+            <button id="btnImportData" class="px-3 py-2 rounded-xl bg-[var(--card)] hover:bg-[#5a0b5a] font-medium">Importar JSON</button>
+          </div>
+        </div>
+
+        <h3 class="font-semibold mt-6 mb-2">Enviar texto</h3>
+        <div class="flex gap-2">
+          <input id="sendInput" type="text" class="flex-1 bg-[#0D0D0D] rounded-xl p-3 ring-1 ring-white/10" placeholder="Escribe un mensaje…" />
+          <button id="btnSend" class="px-4 py-2 rounded-xl bg-[var(--accent1)] hover:bg-[var(--accent2)] transition font-semibold">Enviar</button>
+        </div>
+        <div id="messageContainer" class="mt-2"></div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="max-w-6xl mx-auto px-4 pb-10 text-center text-xs text-[var(--muted)]">
+    Hecho por el equipo de SingToSpeech.
+  </footer>
+
+<script>
+// ====== SELECTORES ======
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const subtitles = document.getElementById('subtitles');
+const camStatus = document.getElementById('camStatus');
+const video = document.getElementById('video');
+const btnStartCam = document.getElementById('btnStartCam');
+const btnStopCam  = document.getElementById('btnStopCam');
+const btnTranslateText  = document.getElementById('btnTranslateText');
+const btnTranslateVoice = document.getElementById('btnTranslateVoice');
+const btnSpace = document.getElementById('btnSpace');
+const btnBack  = document.getElementById('btnBack');
+const btnToggleAuto = document.getElementById('btnToggleAuto');
+
+const labelSelect = document.getElementById('labelSelect');
+const btnAddSample = document.getElementById('btnAddSample');
+const btnClearData = document.getElementById('btnClearData');
+const btnExportData = document.getElementById('btnExportData');
+const btnImportData = document.getElementById('btnImportData');
+const fileImport = document.getElementById('fileImport');
+const sampleInfo = document.getElementById('sampleInfo');
+
+const sendInput = document.getElementById('sendInput');
+const btnSend = document.getElementById('btnSend');
+const messageContainer = document.getElementById('messageContainer');
+
+// Rellenar selector de letras A–Z
+(() => {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  for (const L of letters){
+    const opt = document.createElement('option');
+    opt.value = L; opt.textContent = L;
+    labelSelect.appendChild(opt);
+  }
+})();
+
+// ====== MEDIAPIPE HANDS ======
+const hands = new Hands({
+  locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+});
+hands.setOptions({
+  maxNumHands: 2,
+  modelComplexity: 1,
+  minDetectionConfidence: 0.7,
+  minTrackingConfidence: 0.7
+});
+
+// ====== DATASET (KNN) ======
+const dataset = Object.create(null);
+const centroids = Object.create(null);
+
+function saveDataset(){
+  const packed = {};
+  for (const [k, arr] of Object.entries(dataset)) packed[k] = arr.map(v => Array.from(v));
+  try { localStorage.setItem('lessa-dataset', JSON.stringify(packed)); } catch {}
+}
+function loadDataset(){
+  try {
+    const raw = localStorage.getItem('lessa-dataset'); if (!raw) return;
+    const packed = JSON.parse(raw);
+    for (const [k, arr] of Object.entries(packed)) dataset[k] = arr.map(a => Float32Array.from(a));
+    recomputeCentroids();
+    updateSampleInfo();
+  } catch {}
+}
+loadDataset();
+
+function updateSampleInfo(){
+  let classes = 0, samples = 0;
+  for (const arr of Object.values(dataset)){ if (arr.length){ classes++; samples += arr.length; } }
+  sampleInfo.textContent = `${classes} clases | ${samples} muestras`;
+}
+
+function recomputeCentroids(){
+  for (const [lab, arr] of Object.entries(dataset)){
+    if (!arr.length){ delete centroids[lab]; continue; }
+    const dim = arr[0].length;
+    const c = new Float32Array(dim);
+    for (const v of arr) for (let i=0;i<dim;i++) c[i]+=v[i];
+    for (let i=0;i<dim;i++) c[i]/=arr.length;
+    centroids[lab] = c;
+  }
+}
+
+function l2(a,b){ let s=0; for (let i=0;i<a.length;i++){ const d=a[i]-b[i]; s+=d*d; } return Math.sqrt(s); }
+
+function predictKNN(feat, kOverride){
+  let total=0; for (const arr of Object.values(dataset)) total += arr.length;
+  if (!total) return {label:null, conf:0};
+  const k = Math.max(3, Math.min(7, kOverride ?? Math.round(Math.sqrt(total)) ));
+
+  const entries = [];
+  for (const [lab, arr] of Object.entries(dataset)){
+    for (const v of arr){
+      entries.push({lab, d:l2(feat, v)});
+    }
+  }
+  entries.sort((a,b)=>a.d-b.d);
+  const top = entries.slice(0, Math.min(k, entries.length));
+
+  const votes = {};
+  let sum=0, bestLab=null, bestScore=-1;
+  for (const n of top){
+    const w = 1/(n.d + 1e-6);
+    votes[n.lab] = (votes[n.lab]||0) + w;
+    sum += w;
+    if (votes[n.lab] > bestScore){ bestScore = votes[n.lab]; bestLab = n.lab; }
+  }
+
+  // Booster por centroides
+  let boostLab=null, boostScore=-1;
+  for (const [lab, c] of Object.entries(centroids)){
+    const w = 1/(l2(feat,c) + 1e-6);
+    if (w > boostScore){ boostScore = w; boostLab = lab; }
+  }
+  if (boostLab){
+    votes[boostLab] = (votes[boostLab]||0) + 0.2*boostScore;
+    bestLab=null; bestScore=-1; sum=0;
+    for (const v of Object.values(votes)) sum += v;
+    for (const [lab, v] of Object.entries(votes)){
+      if (v > bestScore){ bestScore = v; bestLab = lab; }
+    }
+  }
+  const conf = bestScore/(sum||1);
+  return {label:bestLab, conf};
+}
+
+// Persistencia / Import / Export
+btnClearData.onclick = () => {
+  for (const k of Object.keys(dataset)) delete dataset[k];
+  for (const k of Object.keys(centroids)) delete centroids[k];
+  saveDataset(); updateSampleInfo();
+  alert('Dataset borrado.');
+};
+btnExportData.onclick = () => {
+  const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(localStorage.getItem('lessa-dataset') || '{}');
+  const a = document.createElement('a');
+  a.href = dataStr; a.download = 'lessa-dataset.json'; a.click();
+};
+btnImportData.onclick = () => fileImport.click();
+fileImport.addEventListener('change', async (e)=>{
+  const f = e.target.files[0]; if (!f) return;
+  const txt = await f.text();
+  try {
+    localStorage.setItem('lessa-dataset', txt);
+    for (const k of Object.keys(dataset)) delete dataset[k];
+    for (const k of Object.keys(centroids)) delete centroids[k];
+    loadDataset();
+    alert('Dataset importado.');
+  } catch (err){ alert('No se pudo importar JSON'); }
+});
+
+// ===== HELPERS GEOM & FEATURES =====
+function vsub(a,b){ return {x:a.x-b.x, y:a.y-b.y, z:(a.z||0)-(b.z||0)}; }
+function vlen(a){ return Math.hypot(a.x, a.y, a.z||0); }
+function dist(a,b){ return vlen(vsub(a,b)); }
+function rotXY(p, cosT, sinT){
+  return { x: p.x*cosT - p.y*sinT, y: p.x*sinT + p.y*cosT, z: p.z||0 };
+}
+
+function normalizeLandmarks(landmarks, handed='Right'){
+  const lm = landmarks.map(p => ({x:p.x, y:p.y, z:p.z||0}));
+  if (handed === 'Left'){ for (const p of lm) p.x = -p.x; }
+  const wrist = {...lm[0]};
+  for (const p of lm){ p.x-=wrist.x; p.y-=wrist.y; p.z-=wrist.z; }
+  const mcpIdx=[5,9,13,17];
+  let acc=0; for (const i of mcpIdx) acc += vlen(lm[i]);
+  const scale = (acc/mcpIdx.length)||1e-6;
+  for (const p of lm){ p.x/=scale; p.y/=scale; p.z/=scale; }
+  const axis = {x:lm[9].x, y:lm[9].y};
+  const th = Math.atan2(axis.y, axis.x) - Math.PI/2;
+  const cosT=Math.cos(th), sinT=Math.sin(th);
+  for (let i=0;i<lm.length;i++){ const r=rotXY(lm[i],cosT,sinT); lm[i]=r; }
+  return lm;
+}
+
+function fingerCurl(lm, tip, pip, mcp){
+  const d_tip = dist(lm[tip], lm[mcp]);
+  const d_pip = dist(lm[pip], lm[mcp]);
+  return (d_pip - d_tip);
+}
+
+function extractFeatures(landmarks, handed='Right'){
+  const lm = normalizeLandmarks(landmarks, handed);
+  const out = [];
+  for (let i=0;i<21;i++){ out.push(lm[i].x, lm[i].y); }
+  const tips=[4,8,12,16,20], mcps=[5,9,13,17];
+  for (const t of tips) out.push( dist(lm[0], lm[t]) );
+  for (const m of mcps) out.push( dist(lm[0], lm[m]) );
+  out.push( dist(lm[8],lm[12]), dist(lm[12],lm[16]), dist(lm[16],lm[20]), dist(lm[8],lm[20]) );
+  out.push(
+    fingerCurl(lm,8,6,5),
+    fingerCurl(lm,12,10,9),
+    fingerCurl(lm,16,14,13),
+    fingerCurl(lm,20,18,17),
+    fingerCurl(lm,4,3,2)
+  );
+  return Float32Array.from(out);
+}
+
+// ====== REGLAS RÁPIDAS + GESTO "HOLA" (wave) ======
+function isExtended(lm, tip, pip){ return lm[tip].y < lm[pip].y; }
+function isCurled(lm, tip, pip){ return lm[tip].y > lm[pip].y; }
+function thumbExtended(lm){ return (Math.abs(lm[4].x) > 0.25) && (lm[4].y < lm[3].y); }
+function touch(a,b){ return dist(a,b) < 0.35; }
+
+function classifyRuleBased(rawLm, handed='Right'){
+  const lm = normalizeLandmarks(rawLm, handed);
+  const ext = {
+    i: isExtended(lm,8,6),
+    m: isExtended(lm,12,10),
+    r: isExtended(lm,16,14),
+    p: isExtended(lm,20,18),
+  };
+  const cur = {
+    i: isCurled(lm,8,6),
+    m: isCurled(lm,12,10),
+    r: isCurled(lm,16,14),
+    p: isCurled(lm,20,18),
+  };
+  const tExt = thumbExtended(lm);
+
+  // LETRAS / GESTOS básicos
+  if (cur.i && cur.m && cur.r && cur.p && !tExt) return {label:'B', conf:0.95};
+  if (ext.i && ext.m && ext.r && ext.p) return {label:'A', conf:0.90};
+  if (ext.i && tExt && cur.m && cur.r && cur.p) return {label:'L', conf:0.95};
+  if (tExt && ext.p && cur.i && cur.m && cur.r) return {label:'Y', conf:0.90};
+  if (touch(lm[4], lm[8])) return {label:'F', conf:0.92};
+  if (ext.i && cur.m && cur.r && cur.p && !tExt) return {label:'D', conf:0.85};
+  if (ext.i && tExt && cur.m && cur.r && cur.p && Math.abs(lm[4].y - lm[8].y) < 0.12) return {label:'G', conf:0.85};
+  if (tExt && cur.i && cur.m && cur.r && cur.p && lm[4].y < lm[2].y) return {label:'THUMBS_UP', conf:0.9};
+  if (ext.i && ext.m && cur.r && cur.p) return {label:'PEACE', conf:0.9};
+  if (tExt && ext.i && ext.p && cur.m && cur.r) return {label:'ILY', conf:0.9};
+
+  // C (arco de mano) — corregido bug 'Im' -> 'lm'
+  if (ext.i && ext.m && ext.r && ext.p && tExt && (lm[8].x - lm[5].x > 0.05) && (lm[4].x < lm[8].x)) {
+    return {label:'C', conf:0.85};
+  }
+
+  return {label:null, conf:0};
+}
+
+// Detección "wave" (hola) con historial de la muñeca (lm[0].x)
+const waveHist = [];
+const WAVE_MAX = 30;       // fotogramas max en buffer
+const WAVE_MIN_PEAKS = 3;  // cuántos cruces de dirección
+const WAVE_MIN_AMP = 0.10; // amplitud mínima normalizada
+let lastHolaAt = 0;
+const HOLA_COOLDOWN = 1500; // ms
+
+function detectWave(x){
+  waveHist.push(x);
+  if (waveHist.length > WAVE_MAX) waveHist.shift();
+  if (waveHist.length < 10) return false;
+
+  const min = Math.min(...waveHist);
+  const max = Math.max(...waveHist);
+  if ((max - min) < WAVE_MIN_AMP) return false;
+
+  // Contar cambios de dirección (cruces)
+  let dir = 0, peaks = 0;
+  for (let i=1;i<waveHist.length;i++){
+    const d = waveHist[i] - waveHist[i-1];
+    const s = Math.sign(d);
+    if (s !== 0 && s !== dir){
+      if (dir !== 0) peaks++;
+      dir = s;
+    }
+  }
+  return peaks >= WAVE_MIN_PEAKS;
+}
+
+
+
+// ====== SUAVIZADO Y CONTROL ======
+const WIN=10, NEED=7, CONF_MIN=0.75;
+let predWin=[];
+let autoOn=false;
+let textBuffer='';
+
+// ====== VOZ LENTA ======
+const synth = window.speechSynthesis;
+let lastSpoken='', lastAt=0;
+const COOLDOWN=1200;
+function speakSlow(text){
+  const now = performance.now();
+  if (text===lastSpoken && (now-lastAt)<COOLDOWN) return;
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'es-ES';
+  u.rate = 0.75;
+  u.pitch = 1.0;
+  synth.speak(u);
+  lastSpoken=text; lastAt=now;
+}
+
+// ====== LOOP DE RESULTADOS ======
+let lastLandmarks=null, lastHanded='Right';
+
+hands.onResults((results)=>{
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+
+  ctx.save();
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(results.image, 0,0, canvas.width, canvas.height);
+
+  const handsLM = results.multiHandLandmarks || [];
+  const handsHD = results.multiHandedness   || [];
+
+  if (handsLM.length){
+    for (let i=0; i<handsLM.length; i++){
+      const lm = handsLM[i];
+      const handed = (handsHD[i] && handsHD[i].label) ? handsHD[i].label : 'Right';
+      const color = handed === 'Left' ? '#FF7A00' : '#3DDC97';
+      drawConnectors(ctx, lm, HAND_CONNECTIONS, { color, lineWidth: 3 });
+      drawLandmarks(ctx, lm, { color: '#FFFFFF', lineWidth: 2 });
+
+      const pWrist = toCanvasXY(lm[0], canvas.width, canvas.height);
+      ctx.font = '12px Inter, system-ui';
+      ctx.fillStyle = color;
+      ctx.fillText(handed, pWrist.x + 8, pWrist.y - 8);
+
+      const pIndex = toCanvasXY(lm[8], canvas.width, canvas.height);
+      const pThumb = toCanvasXY(lm[4], canvas.width, canvas.height);
+      drawPointer(ctx, pIndex, color);
+      drawPointer(ctx, pThumb, color);
+      ctx.beginPath();
+      ctx.moveTo(pThumb.x, pThumb.y);
+      ctx.lineTo(pIndex.x, pIndex.y);
+      ctx.strokeStyle = color + 'AA';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    const lm0 = handsLM[0];
+    lastLandmarks = lm0;
+    if (handsHD[0]?.label) lastHanded = handsHD[0].label;
+
+    // Historial para "hola" (waving) usando muñeca X normalizada
+    const norm0 = normalizeLandmarks(lm0, lastHanded);
+    detectWave(norm0[0].x); // actualizar buffer
+
+    if (autoOn){
+      // 1) Reglas
+      const rule = classifyRuleBased(lm0, lastHanded);
+      if (rule.label) predWin.push({label:rule.label, conf:rule.conf, type:'rule'});
+
+      // 2) Letras via KNN si hay dataset
+      if (Object.keys(dataset).length){
+        const feat = extractFeatures(lastLandmarks, lastHanded);
+        const pr = predictKNN(feat);
+        if (pr.label && pr.conf >= 0.6){
+          predWin.push({label:pr.label, conf:pr.conf, type:'knn'});
+        }
+      }
+
+      if (predWin.length > WIN) predWin.shift();
+
+      // voto estable
+      const tally={};
+      for (const p of predWin){
+        if (!p.label || p.conf < CONF_MIN) continue;
+        const key = p.label + '|' + p.type;
+        tally[key] = (tally[key]||0) + 1;
+      }
+      let bestKey=null, bestCnt=0;
+      for (const [k,n] of Object.entries(tally)){ if (n>bestCnt){ bestCnt=n; bestKey=k; } }
+      let stable=null, source='knn';
+      if (bestKey && bestCnt >= NEED){
+        const [lab,t] = bestKey.split('|');
+        stable = lab; source = t;
+      }
+
+      const now = performance.now();
+      // Priorizar gesto "HOLA" (wave) si se detecta oscilación
+      if (detectWave(norm0[0].x) && (now - lastHolaAt) > HOLA_COOLDOWN){
+        appendOutput('Hola');
+        lastHolaAt = now;
+        predWin.length = 0;
+      } else if (stable){
+        const out = (source==='rule' ? (SIGN_TRANSLATE[stable] || stable) : stable);
+        if (source==='rule' && SIGN_TRANSLATE[stable]){
+          if (textBuffer && !textBuffer.endsWith(' ')) textBuffer+=' ';
+          textBuffer += SIGN_TRANSLATE[stable] + ' ';
+        } else {
+          textBuffer += out;
+        }
+        subtitles.textContent = `🧠 ${textBuffer}`;
+        speakSlow(out);
+        predWin.length = 0;
+      } else {
+        if (rule?.label) subtitles.textContent = `Seña: ${rule.label} ${(rule.conf*100|0)}%`;
+        else subtitles.textContent = '👋 Mano detectada';
+      }
+    } else {
+      subtitles.textContent = '👋 Mano detectada';
+    }
+    camStatus.textContent = "activa";
+  } else {
+    lastLandmarks = null;
+    predWin.length = 0;
+    subtitles.textContent = "❌ No se detecta mano";
+    camStatus.textContent = "inactiva";
+  }
+  ctx.restore();
+});
+
+function appendOutput(txt){
+  if (textBuffer && !textBuffer.endsWith(' ')) textBuffer+=' ';
+  textBuffer += txt + ' ';
+  subtitles.textContent = `🧠 ${textBuffer}`;
+  speakSlow(txt);
+}
+
+// ====== DIBUJO UTILS ======
+function toCanvasXY(pt, w, h){ return { x: pt.x * w, y: pt.y * h }; }
+function drawPointer(ctx, p, color = '#00E5FF') {
+  const rOuter = 14, rInner = 6;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, rOuter, 0, Math.PI*2);
+  ctx.fillStyle = color + '33';
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = color;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, rInner, 0, Math.PI*2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.restore();
+}
+
+// ====== CONTROL DE CAMARA ======
+let cam = null;
+btnStartCam.onclick = async () => {
+  if (!cam) {
+    cam = new Camera(video, {
+      onFrame: async () => { await hands.send({ image: video }); },
+      width: 640,
+      height: 480
+    });
+  }
+  cam.start();
+  camStatus.textContent = "activando…";
+};
+btnStopCam.onclick = () => { if (cam) cam.stop(); camStatus.textContent = "inactiva"; };
+
+// ====== TRADUCCIÓN / AUTO ======
+btnTranslateText.onclick = () => {
+  autoOn = true;
+  btnToggleAuto.textContent = 'Auto: ON';
+  subtitles.textContent = "✍ Traducción automática a texto activada";
+};
+btnTranslateVoice.onclick = () => {
+  autoOn = !autoOn;
+  btnToggleAuto.textContent = autoOn ? 'Auto: ON' : 'Auto: OFF';
+  subtitles.textContent = autoOn ? "🎤 Traducción a voz activada" : "🛑 Traducción detenida";
+};
+btnToggleAuto.onclick = () => btnTranslateVoice.onclick();
+
+// ====== BOTONES AUX (Espacio/Borrar) ======
+btnSpace.onclick = () => { textBuffer += " "; subtitles.textContent = `🧠 ${textBuffer}`; };
+btnBack.onclick  = () => { textBuffer = textBuffer.slice(0, -1); subtitles.textContent = `🧠 ${textBuffer}`; };
+
+// ====== ENVIAR TEXTO ======
+btnSend.onclick = () => {
+  const msg = sendInput.value.trim();
+  if (!msg) return;
+  const div = document.createElement('div');
+  div.className = "message-box";
+  div.textContent = msg;
+  messageContainer.appendChild(div);
+  sendInput.value = "";
+};
+
+// ====== AGREGAR MUESTRA AL DATASET ======
+btnAddSample.onclick = () => {
+  const lab = labelSelect.value;
+  if (!lab){ alert('Selecciona una letra primero.'); return; }
+  if (!lastLandmarks){ alert('No hay mano detectada.'); return; }
+  const feat = extractFeatures(lastLandmarks, lastHanded);
+  dataset[lab] = dataset[lab] || [];
+  dataset[lab].push(feat);
+  saveDataset();
+  recomputeCentroids();
+  updateSampleInfo();
+};
+
+</script>
+</body>
+</html>
